@@ -85,7 +85,10 @@ VOLS=()
 add_toolchain_volumes() {
   local v target
   while read -r v target; do
-    "$RUNTIME" volume create "$v" >/dev/null
+    # Only create if missing: podman volume create errors if the volume
+    # already exists (docker's is idempotent, but this works for both).
+    "$RUNTIME" volume inspect "$v" >/dev/null 2>&1 \
+      || "$RUNTIME" volume create "$v" >/dev/null
     VOLS+=("-v" "$v:$target")
   done <<'VOLLIST'
 vibe-rustup /home/vibe/.rustup
@@ -125,8 +128,8 @@ COMMON=(
   "${GPU_FLAGS[@]}"
   "${USERNS_FLAGS[@]}"
   "${VOLS[@]}"
-  -v "$WORKSPACE:/workspace"
-  -v "$VIBE_HOME:/home/vibe/.vibe"
+  -v "$WORKSPACE:/workspace":z
+  -v "$VIBE_HOME:/home/vibe/.vibe":z
   -w /workspace
   -e "TERM=${TERM:-xterm-256color}"
 )

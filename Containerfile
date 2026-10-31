@@ -15,14 +15,18 @@
 # GPU passthrough needs the NVIDIA Container Toolkit on the host; CUDA 13.x
 # images need host driver >= 580.
 
-# uv/uvx static binaries (official image; pin UV_VERSION for reproducible builds)
-ARG UV_VERSION=latest
-FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv
-
+# ARGs used in FROM lines must be declared *before* the first FROM:
+# podman/buildah does not pick up ARGs that sit between two stages.
+#
 # Base image: NVIDIA CUDA on Ubuntu. Override via --build-arg, e.g.
 #   --build-arg CUDA_IMAGE=nvidia/cuda:13.4.3-devel-ubuntu26.04   (adds nvcc)
 #   --build-arg CUDA_IMAGE=nvidia/cuda:12.8.1-base-ubuntu24.04     (older host driver)
+ARG UV_VERSION=latest
 ARG CUDA_IMAGE=nvidia/cuda:13.4.3-base-ubuntu26.04
+
+# uv/uvx static binaries (official image; pin UV_VERSION for reproducible builds)
+FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv
+
 FROM ${CUDA_IMAGE}
 
 ARG JULIAUP_VERSION=1.23.0
@@ -89,13 +93,13 @@ RUN curl --proto '=https' --tlsv1.2 -fsSL https://sh.rustup.rs \
 # container: `juliaup default release` (downloaded on demand, kept in a named
 # volume via run-vibe.sh).
 RUN ARCH=$(uname -m) \
-    && mkdir -p /home/vibe/.juliaup/bin \
+    && mkdir -p /home/vibe/.juliaup/bin /tmp/juliaup-extract \
     && curl -fsSL -o /tmp/juliaup.tar.gz \
        "https://github.com/JuliaLang/juliaup/releases/download/v${JULIAUP_VERSION}/juliaup-${JULIAUP_VERSION}-${ARCH}-unknown-linux-musl-portable.tar.gz" \
-    && tar -xzf /tmp/juliaup.tar.gz -C /tmp \
-    && find /tmp -type f -name juliaup -exec install -m 0755 {} /home/vibe/.juliaup/bin/juliaup \; \
+    && tar -xzf /tmp/juliaup.tar.gz -C /tmp/juliaup-extract \
+    && find /tmp/juliaup-extract -type f -name juliaup -exec install -m 0755 {} /home/vibe/.juliaup/bin/juliaup \; \
     && cp /home/vibe/.juliaup/bin/juliaup /home/vibe/.juliaup/bin/julia \
-    && rm -rf /tmp/juliaup* \
+    && rm -rf /tmp/juliaup.tar.gz /tmp/juliaup-extract \
     && juliaup --version
 
 # Julia package depot (used once a Julia toolchain is installed on demand)
